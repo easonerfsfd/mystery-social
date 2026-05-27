@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { writeFileSync } from 'node:fs'
 import db, { getOrCreateUser } from '../db.js'
+import { saveImage } from '../imageUtil.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const UPLOADS_DIR = join(__dirname, '../../../server/data/uploads')
@@ -41,19 +41,34 @@ router.post('/me/avatar', (req, res) => {
   const { imageBase64 } = req.body
   if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' })
 
-  const ext = imageBase64.startsWith('data:image/png') ? 'png' : 'jpg'
-  const filename = `avatar-${req.sessionId.slice(0, 8)}-${Date.now()}.${ext}`
-  const buffer = Buffer.from(imageBase64.replace(/^data:image\/\w+;base64,/, ''), 'base64')
-  writeFileSync(join(UPLOADS_DIR, filename), buffer)
+  let avatarUrl
+  try {
+    avatarUrl = saveImage(imageBase64, UPLOADS_DIR, 'avatar')
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message })
+  }
 
-  const avatarUrl = `/uploads/${filename}`
   db.prepare('UPDATE users SET avatar_url = ? WHERE session_id = ?').run(avatarUrl, req.sessionId)
   res.json({ avatarUrl })
+})
+
+router.get('/me/posts', (req, res) => {
+  const posts = db.prepare(
+    'SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC LIMIT 50'
+  ).all(req.sessionId)
+  res.json({ posts })
 })
 
 router.post('/me/reveal', (req, res) => {
   getOrCreateUser(req.sessionId)
   db.prepare('UPDATE users SET revealed = 1 WHERE session_id = ?').run(req.sessionId)
+  res.json({ ok: true })
+})
+
+router.post('/feedback', (req, res) => {
+  const { text } = req.body
+  if (!text?.trim()) return res.json({ ok: true })
+  db.prepare('INSERT INTO feedbacks (user_id, text) VALUES (?, ?)').run(req.sessionId, text.trim())
   res.json({ ok: true })
 })
 

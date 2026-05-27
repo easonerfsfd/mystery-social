@@ -7,10 +7,16 @@ export const useFeedStore = defineStore('feed', () => {
   const hasMore = ref(true)
   const page = ref(1)
   const loading = ref(false)
+  const feedVersion = ref(0)  // increments on full reset; TabDiscover watches this to clear comment state
 
   async function fetchFeed(reset = false) {
     if (loading.value) return
-    if (reset) { page.value = 1; posts.value = []; hasMore.value = true }
+    if (reset) {
+      page.value = 1
+      posts.value = []
+      hasMore.value = true
+      feedVersion.value++
+    }
     loading.value = true
     try {
       const { data } = await api.get('/feed', { params: { page: page.value } })
@@ -30,7 +36,7 @@ export const useFeedStore = defineStore('feed', () => {
 
   async function toggleLike(postId) {
     const post = posts.value.find(p => p.id === postId)
-    if (!post) return
+    if (!post || post._liked) return  // 防重复点赞
     post.likes++
     post._liked = true
     try {
@@ -41,5 +47,9 @@ export const useFeedStore = defineStore('feed', () => {
     }
   }
 
-  return { posts, hasMore, loading, fetchFeed, publish, toggleLike }
+  function removePost(postId) {
+    posts.value = posts.value.filter(p => p.id !== postId)
+  }
+
+  return { posts, hasMore, loading, feedVersion, fetchFeed, publish, toggleLike, removePost }
 })

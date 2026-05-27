@@ -48,7 +48,13 @@ const tab = ref('q')
 const userStore = useUserStore()
 const feedStore = useFeedStore()
 
+function setAppHeight() {
+  document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`)
+}
+
 onMounted(() => {
+  setAppHeight()
+  window.addEventListener('resize', setAppHeight)
   userStore.fetchMe()
 })
 
@@ -65,6 +71,7 @@ function switchToProfile() {
 
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+input, textarea, select { font-size: 16px; }
 
 :root {
   --bg: #0d0d0d;
@@ -126,6 +133,36 @@ body {
   border-top: 0.5px solid #1a1a1a;
   padding: 10px 0 18px;
   flex-shrink: 0;
+}
+
+/* 真机全屏 */
+@media (max-width: 480px) {
+  body {
+    background: var(--bg);
+    overflow: hidden;
+    display: block;
+    min-height: 0;
+    height: var(--app-h, 100svh);
+  }
+  .stage {
+    padding: 0;
+    width: 100%;
+    height: var(--app-h, 100svh);
+    display: flex;
+    align-items: stretch;
+  }
+  .phone {
+    width: 100%;
+    height: var(--app-h, 100svh);
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    overflow: hidden;
+  }
+  .statusbar { display: none; }
+  .screen { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+  .screen > * { position: absolute; inset: 0; }
+  .tabbar { flex-shrink: 0; padding: 10px 0 env(safe-area-inset-bottom, 12px); }
 }
 .tab-btn {
   flex: 1;

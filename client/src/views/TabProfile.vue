@@ -3,10 +3,12 @@
     <!-- Profile header -->
     <div class="profile-header">
       <div class="avatar-wrap" :class="userStore.revealed ? 'revealed' : 'mystery'">
-        <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" class="avatar-photo">
-        <img v-else-if="userStore.revealed" :src="pixelSrc" class="avatar-photo pixel">
-        <i v-else class="ti ti-help"></i>
-        <label v-if="userStore.revealed" class="avatar-camera-badge" title="更换头像">
+        <img
+          :src="userStore.avatarUrl || pixelSrc"
+          class="avatar-photo"
+          :class="{ pixel: !userStore.avatarUrl }"
+        >
+        <label class="avatar-camera-badge" title="更换头像">
           <i class="ti ti-camera"></i>
           <input type="file" accept="image/*" style="display:none" @change="onAvatarPick">
         </label>
@@ -68,6 +70,9 @@
           <span class="my-post-time">{{ relativeTime(post.created_at) }}</span>
           <div class="my-post-counts">
             <span><i class="ti ti-heart"></i> {{ post.likes }}</span>
+            <button class="my-post-delete" @click="deletePost(post.id)">
+              <i class="ti ti-trash"></i>
+            </button>
           </div>
         </div>
       </div>
@@ -94,12 +99,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user.js'
+import { useFeedStore } from '@/stores/feed.js'
 import { pixelAvatar } from '@/utils/pixelAvatar.js'
 import api from '@/api.js'
 
 const userStore = useUserStore()
+const feedStore = useFeedStore()
 
 const editMode = ref(false)
 const editAlias = ref('')
@@ -118,12 +125,15 @@ const joinedDays = computed(() => {
 })
 
 onMounted(fetchMyPosts)
+watch(() => userStore.stats.posts, fetchMyPosts)
 
 async function fetchMyPosts() {
   loadingPosts.value = true
   try {
-    const { data } = await api.get('/feed', { params: { page: 1 } })
-    myPosts.value = data.posts.filter(p => p.user_id === userStore.sessionId || true)
+    const { data } = await api.get('/me/posts')
+    myPosts.value = data.posts
+  } catch (e) {
+    console.error('fetchMyPosts failed', e)
   } finally {
     loadingPosts.value = false
   }
@@ -136,12 +146,20 @@ function openEdit() {
 }
 
 async function saveProfile() {
-  await userStore.updateProfile({ alias: editAlias.value, bio: editBio.value })
-  editMode.value = false
+  try {
+    await userStore.updateProfile({ alias: editAlias.value, bio: editBio.value })
+    editMode.value = false
+  } catch (e) {
+    console.error('saveProfile failed', e)
+  }
 }
 
 async function doReveal() {
-  await userStore.reveal()
+  try {
+    await userStore.reveal()
+  } catch (e) {
+    console.error('reveal failed', e)
+  }
 }
 
 async function onAvatarPick(e) {
@@ -149,18 +167,40 @@ async function onAvatarPick(e) {
   if (!file) return
   const reader = new FileReader()
   reader.onload = async ev => {
-    await userStore.uploadAvatar(ev.target.result)
+    try {
+      await userStore.uploadAvatar(ev.target.result)
+    } catch (e) {
+      console.error('uploadAvatar failed', e)
+    }
   }
   reader.readAsDataURL(file)
 }
 
-function submitFeedback() {
+async function submitFeedback() {
   if (!feedbackText.value.trim()) return
   feedbackSent.value = true
+  try {
+    await api.post('/feedback', { text: feedbackText.value.trim() })
+  } catch (e) {
+    // 即使接口不存在也不影响 UI 感知
+  }
+}
+
+async function deletePost(id) {
+  try {
+    await api.delete(`/feed/${id}`)
+    myPosts.value = myPosts.value.filter(p => p.id !== id)
+    feedStore.removePost(id)
+    await userStore.fetchMe()
+  } catch (e) {
+    console.error('deletePost failed', e)
+  }
 }
 
 function relativeTime(ts) {
-  const diff = (Date.now() - new Date(ts + 'Z').getTime()) / 1000
+  if (!ts) return ''
+  const d = ts.includes('Z') || ts.includes('+') ? new Date(ts) : new Date(ts.replace(' ', 'T'))
+  const diff = (Date.now() - d.getTime()) / 1000
   if (diff < 60) return '刚刚'
   if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`
   if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`
@@ -169,7 +209,7 @@ function relativeTime(ts) {
 </script>
 
 <style scoped>
-.tab-m { height: 100%; overflow-y: auto; background: var(--bg); }
+.tab-m { height: 100%; overflow-y: auto; background: var(--bg); position: relative; }
 .tab-m::-webkit-scrollbar { display: none; }
 
 .profile-header { padding: 24px 20px 20px; text-align: center; border-bottom: 0.5px solid #1a1a1a; }
@@ -179,10 +219,8 @@ function relativeTime(ts) {
   display: flex; align-items: center; justify-content: center;
   margin: 0 auto 14px; cursor: pointer; position: relative; overflow: visible;
 }
-.avatar-wrap.mystery { background: var(--q-bg); }
-.avatar-wrap.mystery i { font-size: 34px; color: var(--q); }
-.avatar-wrap.revealed { background: var(--d-bg); }
-.avatar-wrap.revealed i { font-size: 34px; color: var(--d); }
+.avatar-wrap.mystery { background: transparent; }
+.avatar-wrap.revealed { background: transparent; }
 .avatar-photo { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; position: absolute; top: 0; left: 0; }
 .avatar-photo.pixel { image-rendering: pixelated; }
 .avatar-camera-badge {
@@ -225,8 +263,11 @@ function relativeTime(ts) {
 .my-post-text { font-size: 14px; color: var(--text2); margin: 0 0 10px; line-height: 1.5; }
 .my-post-footer { display: flex; justify-content: space-between; align-items: center; }
 .my-post-time { font-size: 11px; color: var(--muted); }
-.my-post-counts { display: flex; gap: 12px; }
+.my-post-counts { display: flex; gap: 12px; align-items: center; }
 .my-post-counts span { font-size: 12px; color: var(--muted2); }
+.my-post-delete { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0; display: flex; align-items: center; }
+.my-post-delete:hover { color: var(--m); }
+.my-post-delete i { font-size: 13px; }
 
 .feedback-wrap { padding: 16px 20px 28px; }
 .feedback-card { background: var(--card); border-radius: 14px; padding: 16px; border: 0.5px solid var(--border); }

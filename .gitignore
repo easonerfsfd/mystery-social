@@ -3,3 +3,5 @@ server/data/db.sqlite
 server/data/uploads/
 client/dist/
 .DS_Store
+server/.env
+server/.env.*
