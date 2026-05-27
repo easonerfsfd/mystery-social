@@ -1,21 +1,6 @@
 <template>
   <div class="tab-q">
 
-    <!-- 侧边人物栏：仅输入态展示 -->
-    <Transition name="side-fade">
-      <div v-if="phase === 'input' && sideChangers.length" class="side-changers">
-        <TransitionGroup name="changer-item" tag="div" class="side-list">
-          <div v-for="c in visibleChangers" :key="c.sessionId" class="changer-card">
-            <div class="changer-avatar">
-              <img v-if="c.avatarUrl" :src="c.avatarUrl" class="changer-img" />
-              <canvas v-else :ref="el => bindPixel(el, c.sessionId)" class="changer-pixel" width="24" height="24"></canvas>
-            </div>
-            <span class="changer-name">{{ c.alias }}</span>
-          </div>
-        </TransitionGroup>
-      </div>
-    </Transition>
-
     <!-- 飘屏通知：仅输入态展示 -->
     <div v-if="phase === 'input'" class="float-feed" aria-hidden="true">
       <TransitionGroup name="float-item">
@@ -110,12 +95,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import api from '@/api.js'
 
 const question = ref({ id: 1, text: '', changedBy: 0, authorAlias: '', originQuestion: null, originAnswer: null })
 const answer = ref('')
-const sentAnswer = ref('')  // 锁住发送时的文字，不随 answer 变化
+const sentAnswer = ref('')
 const phase = ref('input')
 const sending = ref(false)
 const aiTyping = ref(false)
@@ -129,101 +114,30 @@ const floatItems = ref([])
 let floatTimer = null
 let floatIdCounter = 0
 let floatIndex = 0
-
-// 侧边人物
-const sideChangers = ref([])
-const visibleChangers = ref([])
-let sideTimer = null
-let sideIndex = 0
-const pixelCanvases = new Map()
-
-function bindPixel(el, sessionId) {
-  if (!el || pixelCanvases.has(sessionId)) return
-  pixelCanvases.set(sessionId, el)
-  drawPixel(el, sessionId)
-}
-
-function drawPixel(canvas, seed) {
-  if (!canvas) return
-  const N = 24
-  const ctx = canvas.getContext('2d')
-  function hash(s) {
-    let h = 2166136261
-    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0 }
-    return h
-  }
-  function rng(seed) {
-    let v = hash(seed + 'rng')
-    return () => { v = Math.imul(v ^ (v >>> 16), 0x45d9f3b) >>> 0; v = Math.imul(v ^ (v >>> 16), 0x45d9f3b) >>> 0; return (v >>> 0) / 4294967296 }
-  }
-  const r = rng(seed)
-  const bgHue = Math.floor(r() * 360)
-  const SKINS = ['#FDDBB4','#F5C99A','#EBB882','#D4956A','#BE7D52','#A0624A','#7C4A32']
-  const HAIR_COLORS = ['#1a1a1a','#3d2b1f','#6b3a2a','#8B4513','#c8a96e','#e8d5b0','#ff6b9d','#7b68ee','#4169e1']
-  const skin = SKINS[Math.floor(r() * SKINS.length)]
-  const hairColor = HAIR_COLORS[Math.floor(r() * HAIR_COLORS.length)]
-  const shirtHue = Math.floor(r() * 360)
-  const p = (x, y, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1) }
-  ctx.fillStyle = `hsl(${bgHue},55%,92%)`; ctx.fillRect(0, 0, 16, 16)
-  for (let y = 3; y <= 6; y++) for (let x = 5; x <= 10; x++) p(x, y, skin)
-  p(4,4,skin); p(4,5,skin); p(11,4,skin); p(11,5,skin)
-  const hs = Math.floor(r() * 3)
-  if (hs === 0) { [5,6,7,8,9,10].forEach(x => p(x,2,hairColor)); [4,5,10,11].forEach(x => p(x,3,hairColor)) }
-  else if (hs === 1) { [4,5,6,7,8,9,10,11].forEach(x => p(x,2,hairColor)); [4,11].forEach(x => { p(x,3,hairColor); p(x,4,hairColor) }) }
-  else { [6,7,8,9].forEach(x => p(x,1,hairColor)); [5,6,7,8,9,10].forEach(x => p(x,2,hairColor)) }
-  p(6,4,'#1a1a1a'); p(9,4,'#1a1a1a')
-  const SHIRT = `hsl(${shirtHue},60%,50%)`
-  for (let y = 8; y <= 11; y++) for (let x = 5; x <= 10; x++) p(x, y, SHIRT)
-  for (let y = 12; y <= 13; y++) for (let x = 5; x <= 10; x++) p(x, y, `hsl(${(shirtHue+120)%360},40%,35%)`)
-}
+let changerPool = []
 
 async function loadChangers() {
   try {
     const { data } = await api.get('/question/changers')
-    sideChangers.value = data.changers || []
+    changerPool = (data.changers || []).map(c => c.alias || c)
     floatIndex = 0
-    sideIndex = 0
-    if (sideChangers.value.length) {
-      visibleChangers.value = sideChangers.value.slice(0, 4)
-      sideIndex = Math.min(4, sideChangers.value.length)
-      await nextTick()
-      visibleChangers.value.forEach(c => {
-        const el = pixelCanvases.get(c.sessionId)
-        if (el) drawPixel(el, c.sessionId)
-      })
-    }
   } catch {}
 }
 
-function rotateSideChanger() {
-  if (!sideChangers.value.length) return
-  if (sideIndex >= sideChangers.value.length) sideIndex = 0
-  const next = sideChangers.value[sideIndex++]
-  if (visibleChangers.value.find(c => c.sessionId === next.sessionId)) return
-  visibleChangers.value = [...visibleChangers.value.slice(1), next]
-  nextTick(() => {
-    const el = pixelCanvases.get(next.sessionId)
-    if (el) drawPixel(el, next.sessionId)
-  })
-}
-
 function spawnFloat() {
-  const pool = sideChangers.value
-  if (!pool.length || floatIndex >= pool.length) { stopFloats(); return }
-  const c = pool[floatIndex++]
+  if (!changerPool.length || floatIndex >= changerPool.length) { stopFloats(); return }
+  const alias = changerPool[floatIndex++]
   const id = ++floatIdCounter
-  floatItems.value.push({ id, alias: c.alias })
+  floatItems.value.push({ id, alias })
   setTimeout(() => { floatItems.value = floatItems.value.filter(i => i.id !== id) }, 3500)
 }
 
 function startFloats() {
   floatTimer = setInterval(spawnFloat, 2400)
-  sideTimer = setInterval(rotateSideChanger, 3500)
 }
 
 function stopFloats() {
   clearInterval(floatTimer); floatTimer = null
-  clearInterval(sideTimer); sideTimer = null
 }
 
 function escapeHtml(str) {
@@ -310,30 +224,6 @@ async function next() {
 <style scoped>
 .tab-q { height: 100%; display: flex; flex-direction: column; background: var(--bg); position: relative; overflow: hidden; }
 
-/* 侧边人物栏 */
-.side-changers {
-  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; gap: 10px; z-index: 10; pointer-events: none;
-}
-.side-list { display: flex; flex-direction: column; gap: 10px; }
-.changer-card {
-  display: flex; align-items: center; gap: 6px;
-  background: rgba(255,255,255,.05); backdrop-filter: blur(8px);
-  border: 0.5px solid rgba(255,255,255,.08); border-radius: 20px;
-  padding: 4px 8px 4px 4px; max-width: 110px;
-}
-.changer-avatar { width: 24px; height: 24px; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
-.changer-img { width: 100%; height: 100%; object-fit: cover; }
-.changer-pixel { width: 24px; height: 24px; image-rendering: pixelated; display: block; }
-.changer-name { font-size: 10px; color: rgba(255,255,255,.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.side-fade-enter-active, .side-fade-leave-active { transition: opacity .4s; }
-.side-fade-enter-from, .side-fade-leave-to { opacity: 0; }
-.changer-item-enter-active { transition: opacity .5s, transform .5s; }
-.changer-item-leave-active { transition: opacity .4s, transform .4s; position: absolute; }
-.changer-item-enter-from { opacity: 0; transform: translateX(-8px); }
-.changer-item-leave-to { opacity: 0; transform: translateX(-8px); }
-
 /* 飘屏 */
 .float-feed { position: absolute; right: 12px; bottom: 120px; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 10; pointer-events: none; max-width: 150px; }
 .float-item { background: rgba(255,255,255,.06); backdrop-filter: blur(8px); border: 0.5px solid rgba(255,255,255,.1); border-radius: 20px; padding: 5px 10px; font-size: 11px; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -349,7 +239,7 @@ async function next() {
 .q-count { font-size: 11px; color: var(--q); background: var(--q-bg); padding: 3px 10px; border-radius: 20px; }
 .q-count strong { font-weight: 600; }
 
-.q-body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 24px 20px 24px 52px; }
+.q-body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 24px 20px; }
 .q-bar { width: 3px; height: 32px; background: var(--q); border-radius: 2px; margin-bottom: 20px; }
 .q-question { color: var(--text); font-size: 21px; line-height: 1.65; font-weight: 600; margin-bottom: 28px; font-family: var(--font-serif); }
 .q-author { display: flex; align-items: center; gap: 8px; }
