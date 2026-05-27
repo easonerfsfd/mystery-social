@@ -81,6 +81,23 @@ try {
   }
 } catch {}
 
+// 迁移：question 表加来历字段
+try {
+  const qCols = db.prepare("PRAGMA table_info(question)").all()
+  if (!qCols.find(c => c.name === 'origin_question')) {
+    db.exec('ALTER TABLE question ADD COLUMN origin_question TEXT')
+    db.exec('ALTER TABLE question ADD COLUMN origin_answer TEXT')
+  }
+} catch {}
+
+// 迁移：users 表加点赞已读计数
+try {
+  const uCols = db.prepare("PRAGMA table_info(users)").all()
+  if (!uCols.find(c => c.name === 'likes_last_seen')) {
+    db.exec('ALTER TABLE users ADD COLUMN likes_last_seen INTEGER DEFAULT 0')
+  }
+} catch {}
+
 // 迁移：answer_logs 表
 try {
   db.exec(`CREATE TABLE IF NOT EXISTS answer_logs (

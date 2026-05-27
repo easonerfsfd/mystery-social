@@ -28,7 +28,10 @@
           <span>发现</span>
         </button>
         <button class="tab-btn" :class="{ 'active-m': tab === 'm' }" @click="switchToProfile">
-          <i class="ti ti-user"></i>
+          <div class="tab-icon-wrap">
+            <i class="ti ti-user"></i>
+            <span v-if="userStore.unreadLikes > 0" class="unread-dot"></span>
+          </div>
           <span>我的</span>
         </button>
       </div>
@@ -66,6 +69,7 @@ function switchToDiscover() {
 function switchToProfile() {
   tab.value = 'm'
   userStore.fetchMe()
+  userStore.ackLikes()
 }
 </script>
 
@@ -181,4 +185,10 @@ body {
 .tab-btn.active-q i, .tab-btn.active-q span { color: var(--q); }
 .tab-btn.active-d i, .tab-btn.active-d span { color: var(--d); }
 .tab-btn.active-m i, .tab-btn.active-m span { color: var(--m); }
+.tab-icon-wrap { position: relative; display: inline-flex; }
+.unread-dot {
+  position: absolute; top: -1px; right: -4px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #e05555; border: 1.5px solid var(--bg);
+}
 </style>

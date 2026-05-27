@@ -13,6 +13,8 @@ router.get('/me', (req, res) => {
   const user = getOrCreateUser(req.sessionId)
   const postCount = db.prepare('SELECT COUNT(*) as c FROM posts WHERE user_id = ?').get(req.sessionId)
   const likesCount = db.prepare('SELECT COALESCE(SUM(likes),0) as total FROM posts WHERE user_id = ?').get(req.sessionId)
+  const totalLikes = likesCount.total
+  const unreadLikes = Math.max(0, totalLikes - (user.likes_last_seen || 0))
   res.json({
     alias: user.alias,
     bio: user.bio,
@@ -20,11 +22,18 @@ router.get('/me', (req, res) => {
     revealed: !!user.revealed,
     stats: {
       posts: postCount.c,
-      likes: likesCount.total,
+      likes: totalLikes,
       answers: user.answers,
     },
+    unreadLikes,
     joinedAt: user.created_at,
   })
+})
+
+router.post('/me/ack-likes', (req, res) => {
+  const likesCount = db.prepare('SELECT COALESCE(SUM(likes),0) as total FROM posts WHERE user_id = ?').get(req.sessionId)
+  db.prepare('UPDATE users SET likes_last_seen = ? WHERE session_id = ?').run(likesCount.total, req.sessionId)
+  res.json({ ok: true })
 })
 
 router.patch('/me', (req, res) => {

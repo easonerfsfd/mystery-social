@@ -11,15 +11,23 @@ router.get('/', (req, res) => {
     text: q.text,
     changedBy: q.changed_by,
     authorAlias: q.author_alias,
+    originQuestion: q.origin_question || null,
+    originAnswer: q.origin_answer || null,
   })
 })
 
-// 最近改变过问题的用户（answers > 0），用于飘屏展示
+// 最近改变过问题的用户（answers > 0），用于飘屏展示，含头像
 router.get('/changers', (req, res) => {
   const rows = db.prepare(
-    `SELECT alias FROM users WHERE answers > 0 ORDER BY created_at DESC LIMIT 30`
+    `SELECT session_id, alias, avatar_url FROM users WHERE answers > 0 ORDER BY answers DESC LIMIT 20`
   ).all()
-  res.json({ changers: rows.map(r => r.alias) })
+  res.json({
+    changers: rows.map(r => ({
+      sessionId: r.session_id,
+      alias: r.alias,
+      avatarUrl: r.avatar_url || null,
+    }))
+  })
 })
 
 // 仅做参数校验 + 确保用户存在；问题进化和计数由 ai-reply 统一处理

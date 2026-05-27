@@ -11,6 +11,7 @@ export const useUserStore = defineStore('user', () => {
   const stats = ref({ posts: 0, likes: 0, answers: 0 })
   const joinedAt = ref('')
   const loaded = ref(false)
+  const unreadLikes = ref(0)
 
   async function fetchMe() {
     const { data } = await api.get('/me')
@@ -20,7 +21,14 @@ export const useUserStore = defineStore('user', () => {
     revealed.value = data.revealed
     stats.value = data.stats
     joinedAt.value = data.joinedAt
+    unreadLikes.value = data.unreadLikes || 0
     loaded.value = true
+  }
+
+  async function ackLikes() {
+    if (unreadLikes.value === 0) return
+    unreadLikes.value = 0
+    await api.post('/me/ack-likes').catch(() => {})
   }
 
   async function updateProfile(payload) {
@@ -39,5 +47,5 @@ export const useUserStore = defineStore('user', () => {
     revealed.value = true
   }
 
-  return { sessionId: sessionIdVal, alias, bio, avatarUrl, revealed, stats, joinedAt, loaded, fetchMe, updateProfile, uploadAvatar, reveal }
+  return { sessionId: sessionIdVal, alias, bio, avatarUrl, revealed, stats, joinedAt, loaded, unreadLikes, fetchMe, ackLikes, updateProfile, uploadAvatar, reveal }
 })

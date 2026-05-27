@@ -169,8 +169,9 @@ router.post('/ai-reply', async (req, res) => {
   const now = new Date().toISOString()
   try {
     db.prepare(`
-      UPDATE question SET text = ?, changed_by = changed_by + 1, author_alias = ? WHERE id = 1
-    `).run(nextQuestion, user.alias)
+      UPDATE question SET text = ?, changed_by = changed_by + 1, author_alias = ?,
+        origin_question = ?, origin_answer = ? WHERE id = 1
+    `).run(nextQuestion, user.alias, question, answer)
     db.prepare('UPDATE users SET answers = answers + 1 WHERE session_id = ?').run(req.sessionId)
     db.prepare(`
       INSERT INTO answer_logs (user_id, alias, question, answer, ai_reply, next_question, created_at)
