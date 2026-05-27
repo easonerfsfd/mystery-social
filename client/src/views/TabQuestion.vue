@@ -44,6 +44,24 @@
     <!-- 对话态 -->
     <div v-show="phase === 'chat'" class="q-sent">
       <div class="chat-area">
+        <!-- 你回答的问题 -->
+        <div v-if="sentQuestion" class="sent-q-label">{{ sentQuestion }}</div>
+
+        <!-- 用户气泡 -->
+        <div class="chat-user">
+          <div class="chat-user-bubble">{{ sentAnswer }}</div>
+          <div class="chat-sent-tag"><i class="ti ti-check"></i> 已发送，正在改变下一个问题</div>
+        </div>
+
+        <!-- AI 回复 -->
+        <div class="chat-ai">
+          <div class="ai-avatar-sm"><i class="ti ti-sparkles"></i></div>
+          <div v-if="aiTyping" class="ai-bubble ai-typing">
+            <span></span><span></span><span></span>
+          </div>
+          <div v-else class="ai-bubble">{{ aiReply }}</div>
+        </div>
+
         <!-- 来历卡：这道题是怎么来的 -->
         <Transition name="origin-fade">
           <div v-if="question.originQuestion && !aiTyping" class="origin-card" @click="originExpanded = !originExpanded">
@@ -60,21 +78,6 @@
             </Transition>
           </div>
         </Transition>
-
-        <!-- 用户气泡 -->
-        <div class="chat-user">
-          <div class="chat-user-bubble">{{ sentAnswer }}</div>
-          <div class="chat-sent-tag"><i class="ti ti-check"></i> 已发送，正在改变下一个问题</div>
-        </div>
-
-        <!-- AI 回复 -->
-        <div class="chat-ai">
-          <div class="ai-avatar-sm"><i class="ti ti-sparkles"></i></div>
-          <div v-if="aiTyping" class="ai-bubble ai-typing">
-            <span></span><span></span><span></span>
-          </div>
-          <div v-else class="ai-bubble">{{ aiReply }}</div>
-        </div>
       </div>
 
       <!-- 操作区：AI 回复后才显示 -->
@@ -101,6 +104,7 @@ import api from '@/api.js'
 const question = ref({ id: 1, text: '', changedBy: 0, authorAlias: '', originQuestion: null, originAnswer: null })
 const answer = ref('')
 const sentAnswer = ref('')
+const sentQuestion = ref('')
 const phase = ref('input')
 const sending = ref(false)
 const aiTyping = ref(false)
@@ -150,7 +154,7 @@ const formattedQuestion = computed(() =>
 onMounted(async () => {
   await fetchQuestion()
   await loadChangers()
-  if (sideChangers.value.length) {
+  if (changerPool.length) {
     setTimeout(spawnFloat, 1000)
     startFloats()
   }
@@ -172,6 +176,7 @@ async function send() {
   aiTyping.value = true
   originExpanded.value = false
   sentAnswer.value = answer.value.trim()
+  sentQuestion.value = question.value.text
   phase.value = 'chat'
   try {
     await api.post('/question/answer', { text: sentAnswer.value })
@@ -214,6 +219,7 @@ async function next() {
   }
   answer.value = ''
   sentAnswer.value = ''
+  sentQuestion.value = ''
   aiReply.value = ''
   aiTyping.value = false
   originExpanded.value = false
@@ -276,6 +282,7 @@ async function next() {
 .q-sent { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--bg); }
 .chat-area { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 20px 16px; display: flex; flex-direction: column; gap: 16px; }
 .chat-area::-webkit-scrollbar { display: none; }
+.sent-q-label { font-size: 13px; color: rgba(255,255,255,.35); line-height: 1.6; font-family: var(--font-serif); border-left: 2px solid var(--q); padding-left: 10px; }
 
 /* 来历卡 */
 .origin-card {
